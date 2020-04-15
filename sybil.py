@@ -31,4 +31,5 @@ class Sybil(identity.Identity):
       self.everyone.sendMessage({"msg":"exposed", "sender":self})
       print(self,"died",fine)
       # die
-      self.state = identity.DEAD
+      return False
+    return True

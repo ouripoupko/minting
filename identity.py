@@ -10,6 +10,9 @@ class Unexpected(State):
 
 class Alive(State):
   def next(self,message):
+    if message["msg"] == "befriend":
+      # ditch this message as I probably got a friend contacting me while waiting to contact a friend
+      return [None,None]
     if message["msg"] == "exposed":
       self.sm.addExposed(message)
       return [self,None]
@@ -37,7 +40,7 @@ class Idle(Alive):
     if len(self.sm.getNeighbours()) < self.sm.getSettings().d:
       self.sm.getEveryone().sendMessage({"msg":"connect","sender":self.sm})
       return [WaitFriend(self.sm),None]
-    self.everyone.sendMessage({"msg":"ready"})
+    self.sm.getEveryone().sendMessage({"msg":"ready"})
     return [Ready(self.sm),None]
 
 
@@ -71,7 +74,7 @@ class WaitApprove(Alive):
 
 
 class AcceptFriend(Alive):
-  def ActionOnEntry(self):
+  def actionOnEntry(self):
     sender = self.message["sender"]
     if len(self.sm.getNeighbours()) > self.sm.getSettings().d:
       sender.sendMessage({"msg":"decline"})
@@ -85,19 +88,21 @@ class AcceptFriend(Alive):
 class Ready(Alive):
   def next(self,message):
     if message["msg"] == "directConnect":
-      return [AcceptFriend(self.sm,message),self.UnfoldReadiness]
+      return [AcceptFriend(self.sm,message),self.unfoldReadiness]
     if message["msg"] == "mint":
       return [Minting(self.sm,message),None]
     return super().next(message)
 
-  def UnfoldReadiness(self):
-    self.sm.sendMessage({"msg":"unfold"})
+  def unfoldReadiness(self):
+    self.sm.getEveryone().sendMessage({"msg":"unfold"})
 
 
 class Minting(Alive):
   def actionOnEntry(self):
-    self.sm.mint()
-    return [Idle(self.sm),None]
+    if self.sm.mint():
+      return [Idle(self.sm),None]
+    else:
+      return [Dead(self.sm),None]
 
 
 class Dead(Alive):
@@ -147,7 +152,7 @@ class Identity(StateMachine):
     pass
 
   def age(self):
-    pass
+    return True
 
   def isAvailable(self):
     return len(self.getNeighbours()) <= self.settings.d
@@ -158,8 +163,8 @@ class Identity(StateMachine):
   def mint(self):
     self.ledger[-1][MINTED] = self.ledger[-1][MINTED] + 1
     self.ledger[-1][END] = self.loop
-    self.age()
     self.loop = self.loop + 1
+    return self.age()
 
   def handleExposed(self, bHandleNeighbours):
     bGrowLedger = False

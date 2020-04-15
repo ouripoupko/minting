@@ -17,21 +17,24 @@ class Everyone(ThreadedQueue):
     self.counters = [0,0,0]
     self.constructor = [Honest,Corrupt,Sybil]
     self.community={}
+    self.bootstrap = []
     self.dead = []
     self.idCount = 1
     self.readyCount = 0
-    self.loops = -1
+    self.loops = 0
     random.seed()
 
   def handleMessage(self, message):
     if message["msg"] == "connect":
       self.findFriend(message["sender"])
     if message["msg"] == "ready":
-      if(self.loops == 0):
-        print("ready with neighbours:", self.readyCount)
+#      if(self.loops == 0):
+#        print("ready with neighbours:", self.readyCount)
       self.readyCount = self.readyCount + 1
+      print("ready:", self.readyCount)
     if message["msg"] == "unfold":
       self.readyCount = self.readyCount - 1
+      print("ready:", self.readyCount)
     if message["msg"] == "exposed":
       sybil = message["sender"]
       self.dead.append(self.community.pop(sybil.getID(),None))
@@ -47,17 +50,17 @@ class Everyone(ThreadedQueue):
     else:
       idType = -1
     if idType == -1:
-      if self.loops == -1:
-        for identity in self.community.values():
-          identity.sendMessage({"msg":"start"})
-        self.loops = 0
+      for identity in self.bootstrap:
+        identity.sendMessage({"msg":"start"})
+      self.bootstrap = []
     else:
+      print("Creating a new identity",self.idCount)
       self.community[self.idCount] = self.constructor[idType](self.settings,self.idCount,self,self.loops)
       self.community[self.idCount].start()
+      self.bootstrap.append(self.community[self.idCount])
       self.counters[idType] = self.counters[idType]+1
       self.idCount = self.idCount + 1
     if self.readyCount == len(self.community):
-      import pdb; pdb.set_trace()
       self.readyCount = 0
       if self.loops == 100:
         for identity in self.community.values():
