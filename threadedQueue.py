@@ -19,10 +19,10 @@ class ThreadedQueue(threading.Thread):
 
 
   def handleMessage(self, message):
-    None
+    pass
 
   def work(self):
-    None
+    pass
 
   def sendMessage(self,message):
     self.q.put(message)

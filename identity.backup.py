@@ -1,100 +1,17 @@
 
 from stateMachine import State, StateMachine
-import bisect
-
-class Unexpected(State):
-  def actionOnEntry(self):
-    print(self, "!!!   unexpected message arrived   !!!",message)
-    return [None, None]
-
-
-class Alive(State):
-  def next(self,message):
-    if message["msg"] == "die":
-      self.sm.doKill()
-      return [None, None]
-    return [Unexpected(self.sm,message),None]
-
 
 class Init(State):
   def next(self,message):
+    super().next(message)
     if message["msg"] == "start":
-      return [Idle(self.sm,message), None]
-    return [Unexpected(self.sm,message),None]
+      return [Idle(self.sm), self.onStart]
 
+  def onStart(self):
+    print(self, "start transition")
 
-class Idle(Alive):
-  def next(self,message):
-    if message["msg"] == "directConnect":
-      return [AcceptFriend(self.sm,message),None]
-    return super().next(message)
-
-
-class WaitFriend(Alive):
-  def next(self,message):
-    if message["msg"] == "befriend"
-      return [InspectFriend(self.sm,message),None]
-    if message["msg"] == "directConnect":
-      return [AcceptFriend(self.sm,message),None]
-    return super().next(message)
-
-
-class InspectFriend(Condition):
-  def resolve(self):
-    candidate = self.message["friend"]
-    if candidate != self.sm and self.sm.isAFriend(candidate) and candidate not in self.getNeighbours():
-      candidate.sendMessage({"msg":"directConnect","sender":self.sm})
-      return [WaitApprove(self.sm,message),None]
-    return [Idle(self.sm,message),None]
-
-
-class WaitApprove(Alive):
-  def next(self,message):
-    if message["msg"] == "directConnect":
-      sender = self.message["sender"]
-      sender.sendMessage({"msg":"decline"})
-      return [None,None]
-    if message["msg"] == "decline":
-      return [Idle(self.sm,message),None]
-    if message["msg"] == "connected":
-      sender = message["sender"]
-      self.sm.addNeighbour(sender)
-      return [Idle(self.sm,message),None]
-    return super().next(message)
-
-
-class AcceptFriend(Alive):
-  def ActionOnEntry(self):
-    sender = self.message["sender"]
-    if len(self.sm.getNeighbours()) > self.sm.getSettings.d:
-      sender.sendMessage({"msg":"decline"})
-    else:
-      self.sm.growLedger()
-      self.sm.addNeighbour(sender)
-      sender.sendMessage({"msg":"connected", "sender":self.sm})
-    return [Idle(self.sm),None]
-
-
-class Ready(Alive):
-  def next(self,message):
-    if message["msg"] == "directConnect":
-      return [AcceptFriend(self.sm,message),self.UnfoldReadiness]
-    if message["msg"] == "mint":
-      return [Minting(self.sm,message),None]
-    return super().next(message)
-
-  def UnfoldReadiness(self):
-    self.sm.sendMessage({"msg":"unfold"})
-
-
-class Minting(Alive):
+class Idle(State):
   pass
-
-
-class Dead(Alive):
-  pass
-
-MINTED, NEIGHBOURS, FINE, START, END = range(5)
 
 class Identity(StateMachine):
   def __init__(self,settings,myid,everyone,loop):
@@ -104,37 +21,71 @@ class Identity(StateMachine):
     self.id=myid
     self.everyone=everyone
     self.loop = loop
-    self.ledger = [{MINTED:0,NEIGHBOURS:{},FINE:0, START:self.loop, END:self.loop}]
-    self.ledgerIndex = [0]
 
   def __str__(self):
     return type(self).__name__+"-"+str(self.id)
 
-  def getNeighbours(self):
-    return self.ledger[-1][NEIGHBOURS].values()
 
-  def getSettings(self):
-    return self.settings
 
-  def growLedger(self):
-    if self.loop > self.ledger[-1][START]:
-      self.ledgerIndex.append(self.loop)
-      self.ledger.append({MINTED:0,NEIGHBOURS:self.ledger[-1][NEIGHBOURS].copy(),FINE:0, START:self.loop, END:self.loop})
 
-  def addNeighbour(self,neighbour):
-    self.ledger[-1][NEIGHBOURS][neighbour.getID()] = neighbour
 
-  def doKill(self):
-    print(self,self.ledger)
-    super().doKill()
 
 
 '''from threadedQueue import ThreadedQueue
+import random
+import bisect
+import copy
 
+INIT, IDLE, WAIT_FRIEND, WAIT_APPROVE, READY, MINTING, DEAD = range(7)
+MINTED, NEIGHBOURS, FINE, START, END = range(5)
+class Identity(ThreadedQueue):
+
+  def __init__(self,settings,myid,everyone,loop):
+    ThreadedQueue.__init__(self)
+    self.settings = settings
+    self.id=myid
+    self.everyone=everyone
+    self.state = INIT
+    self.loop = loop
+    self.ledger = [{MINTED:0,NEIGHBOURS:{},FINE:0, START:self.loop, END:self.loop}]
+    self.ledgerIndex = [0]
     self.exposedMessages = []
     self.attempts = 0
 
+  def __str__(self):
+    return type(self).__name__+"-"+str(self.id)
+
   def handleMessage(self, message):
+    if message["msg"] == "befriend" and self.state == WAIT_FRIEND:
+      candidate = message["friend"]
+      if candidate != self and self.isAFriend(candidate) and candidate not in self.ledger[-1][NEIGHBOURS].values():
+        candidate.sendMessage({"msg":"directConnect","sender":self})
+        self.state = WAIT_APPROVE
+      else:
+        self.state = IDLE
+    if message["msg"] == "directConnect":
+      sender = message["sender"]
+      if self.state == WAIT_APPROVE or len(self.ledger[-1][NEIGHBOURS]) > self.settings.d:
+        sender.sendMessage({"msg":"decline"})
+      else:
+        if self.loop > self.ledger[-1][START]:
+          self.ledgerIndex.append(self.loop)
+          self.ledger.append({MINTED:0,NEIGHBOURS:self.ledger[-1][NEIGHBOURS].copy(),FINE:0, START:self.loop, END:self.loop})
+        self.ledger[-1][NEIGHBOURS][sender.getID()] = sender
+        self.attempts = 0
+        self.state = IDLE if self.state != READY else READY
+        sender.sendMessage({"msg":"connected", "sender":self})
+    if message["msg"] == "decline":
+      self.state = IDLE
+    if message["msg"] == "connected":
+      sender = message["sender"]
+      self.ledger[-1][NEIGHBOURS][sender.getID()] = sender
+      self.attempts = 0
+      self.state = IDLE
+    if message["msg"] == "mint":
+      self.state = MINTING
+    if message["msg"] == "die":
+      self.doKill()
     if message["msg"] == "exposed":
       self.exposedMessages.append(message)
     if message["msg"] == "start":
@@ -207,4 +158,7 @@ class Identity(StateMachine):
   def getID(self):
     return self.id
 
+  def doKill(self):
+    print(self,self.ledger)
+    super().doKill()
 '''
