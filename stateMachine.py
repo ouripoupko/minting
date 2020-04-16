@@ -27,7 +27,7 @@ class StateMachine(ThreadedQueue):
     self.state = None
 
   def handleMessage(self, message):
-#    if self.getID()==18:
+#    if self.getID()>0:
 #      print(self.state,message)
     [next, transition] = self.state.next(message)
     while next:

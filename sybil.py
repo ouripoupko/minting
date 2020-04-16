@@ -16,11 +16,13 @@ class Sybil(identity.Identity):
   def age(self):
     if random.random() < self.settings.exposeProbability:
       # calculate fine
+      payments = 0
       for record in self.ledger:
-        fine = record[identity.MINTED]*2 + record[identity.FINE]
+        fine = (record[identity.MINTED]*2 + record[identity.FINE])/len(record[identity.NEIGHBOURS])
+        print(self,"loop",self.loop,"minted",record[identity.MINTED],"from",record[identity.START],"to",record[identity.END],"with neighbours",record[identity.NEIGHBOURS])
       # inform neighbours
-        print(self,[ident.getID() for ident in record[identity.NEIGHBOURS].values()])
         for neighbour in record[identity.NEIGHBOURS].values():
+          payments = payments + 1
           neighbour.sendMessage({"msg":"exposed",
                                  "sender":self,
                                  "visited":[self],
@@ -28,8 +30,8 @@ class Sybil(identity.Identity):
                                  "end":record[identity.END],
                                  "fine":fine})
       # inform community
-      self.everyone.sendMessage({"msg":"exposed", "sender":self})
-      print(self,"died",fine)
+      self.everyone.sendMessage({"msg":"exposed", "sender":self, "payments":payments})
+      print(self,"died")
       # die
       return False
     return True

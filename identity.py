@@ -40,7 +40,6 @@ class Idle(Alive):
     if len(self.sm.getNeighbours()) < self.sm.getSettings().d:
       self.sm.getEveryone().sendMessage({"msg":"connect","sender":self.sm})
       return [WaitFriend(self.sm),None]
-    self.sm.getEveryone().sendMessage({"msg":"ready"})
     return [Ready(self.sm),None]
 
 
@@ -88,13 +87,19 @@ class AcceptFriend(Alive):
 class Ready(Alive):
   def next(self,message):
     if message["msg"] == "directConnect":
-      return [AcceptFriend(self.sm,message),self.unfoldReadiness]
+      return [AcceptFriend(self.sm,message),None]
+    if message["msg"] == "exposed":
+      self.sm.addExposed(message)
+      return [Idle(self.sm,message),None]
     if message["msg"] == "mint":
       return [Minting(self.sm,message),None]
     return super().next(message)
 
-  def unfoldReadiness(self):
-    self.sm.getEveryone().sendMessage({"msg":"unfold"})
+  def actionOnEntry(self):
+    self.sm.getEveryone().sendMessage({"msg":"ready","sender":self.sm})
+    return [None,None]
+  def actionOnExit(self):
+    self.sm.getEveryone().sendMessage({"msg":"unfold","sender":self.sm})
 
 
 class Minting(Alive):
@@ -126,6 +131,9 @@ class Identity(StateMachine):
     self.exposedMessages = []
 
   def __str__(self):
+    return type(self).__name__+"-"+str(self.id)
+
+  def __repr__(self):
     return type(self).__name__+"-"+str(self.id)
 
   def getNeighbours(self):
@@ -168,10 +176,12 @@ class Identity(StateMachine):
 
   def handleExposed(self, bHandleNeighbours):
     bGrowLedger = False
+    payments = 0
     if self.exposedMessages:
       if bHandleNeighbours:
         bGrowLedger = True;
     for message in self.exposedMessages:
+      payments = payments - 1
       if bHandleNeighbours:
         if message["sender"].getID() in self.ledger[-1][NEIGHBOURS]:
           if bGrowLedger:
@@ -189,20 +199,30 @@ class Identity(StateMachine):
           break
         if bHandleNeighbours:
           self.ledger[index][FINE] = fine*(stop-start)
+          print(self,"loop",self.loop,"accept fine",self.ledger[index][FINE],"from",self.ledger[index][START],"to",self.ledger[index][END])
         else:
-          print(self,[ident.getID() for ident in self.ledger[index][NEIGHBOURS].values()],start,stop,end,self.ledger[index][END])
-          for neighbour in self.ledger[index][NEIGHBOURS].values():
-            if neighbour not in message["visited"]:
-              neighbour.sendMessage({"msg":"exposed",
-                                     "sender":self,
-                                     "visited":message["visited"]+[self],
-                                     "start":start,
-                                     "end":stop-1,
-                                     "fine":fine*(stop-start)})
+          neighbours = set(self.ledger[index][NEIGHBOURS].values()).difference(message["visited"])
+          passFine = fine*(stop-start)/len(neighbours)
+          for neighbour in neighbours:
+            print(self,"loop",self.loop,"is dead. passing",passFine,"to",neighbour)
+            payments = payments + 1
+            neighbour.sendMessage({"msg":"exposed",
+                                   "sender":self,
+                                   "visited":message["visited"]+[self],
+                                   "start":start,
+                                   "end":stop-1,
+                                   "fine":passFine})
         start = stop
+    if self.exposedMessages:
+      self.everyone.sendMessage({"msg":"payments","payments":payments})
     self.exposedMessages = []
 
   def doKill(self):
-    print(self,self.ledger)
+    print(self,
+          "minted:",sum([record[MINTED] for record in self.ledger]),
+          "fined:",sum([record[FINE] for record in self.ledger]),
+          "lived:",self.ledger[-1][END]+1-self.ledger[0][START])
+    for record in self.ledger:
+      print(" ",record)
     super().doKill()
 

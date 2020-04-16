@@ -20,25 +20,35 @@ class Everyone(ThreadedQueue):
     self.bootstrap = []
     self.dead = []
     self.idCount = 1
-    self.readyCount = 0
+    self.ready = {}
+    self.maxReady = 0
     self.loops = 0
+    self.payments = 0
+    self.attempts = 0
     random.seed()
 
   def handleMessage(self, message):
     if message["msg"] == "connect":
       self.findFriend(message["sender"])
     if message["msg"] == "ready":
-#      if(self.loops == 0):
-#        print("ready with neighbours:", self.readyCount)
-      self.readyCount = self.readyCount + 1
-      print("ready:", self.readyCount)
+      sender = message["sender"]
+      self.ready[sender.getID()] = sender
+      if(self.loops == 0):
+        if len(self.ready) > self.maxReady:
+          self.maxReady = len(self.ready)
+          print("ready with neighbours:", self.maxReady)
     if message["msg"] == "unfold":
-      self.readyCount = self.readyCount - 1
-      print("ready:", self.readyCount)
+      sender = message["sender"]
+      self.ready.pop(sender.getID(),None)
     if message["msg"] == "exposed":
       sybil = message["sender"]
       self.dead.append(self.community.pop(sybil.getID(),None))
       self.counters[SYBIL] = self.counters[SYBIL]-1
+      self.payments = self.payments + message["payments"]
+      print("payments:",self.payments)
+    if message["msg"] == "payments":
+      self.payments = self.payments + message["payments"]
+      print("payments:",self.payments)
 
   def work(self):
     if math.floor(self.counters[CORRUPT]*self.settings.sybilRatio) > self.counters[SYBIL]:
@@ -60,8 +70,9 @@ class Everyone(ThreadedQueue):
       self.bootstrap.append(self.community[self.idCount])
       self.counters[idType] = self.counters[idType]+1
       self.idCount = self.idCount + 1
-    if self.readyCount == len(self.community):
-      self.readyCount = 0
+    if len(self.ready) == len(self.community) and self.payments == 0:
+      self.attempts = 0
+      self.ready = {}
       if self.loops == 100:
         for identity in self.community.values():
           identity.sendMessage({"msg":"die"})
@@ -75,6 +86,9 @@ class Everyone(ThreadedQueue):
         print("minting loops:",self.loops)
         for identity in self.community.values():
           identity.sendMessage({"msg":"mint"})
+    self.attempts = self.attempts + 1
+    if self.attempts == 5000:
+        import pdb; pdb.set_trace()
 
   def findFriend(self, identity):
     someone = random.choice(list(self.community.values()))
