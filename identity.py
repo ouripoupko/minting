@@ -1,6 +1,7 @@
 
 from stateMachine import State, StateMachine
 import bisect
+import random
 
 class Unexpected(State):
   def actionOnEntry(self):
@@ -13,9 +14,13 @@ class Alive(State):
     if message["msg"] == "befriend":
       # ditch this message as I probably got a friend contacting me while waiting to contact a friend
       return [None,None]
+    if message["msg"] == "directRequest":
+      sender = message["sender"]
+      sender.sendMessage({"msg":"decline"})
+      return [None,None]
     if message["msg"] == "exposed":
       self.sm.addExposed(message)
-      return [self,None]
+      return [None,None]
     if message["msg"] == "die":
       self.sm.doKill()
       return [None, None]
@@ -31,8 +36,8 @@ class Init(State):
 
 class Idle(Alive):
   def next(self,message):
-    if message["msg"] == "directConnect":
-      return [AcceptFriend(self.sm,message),None]
+    if message["msg"] == "directRequest":
+      return [AcceptDirect(self.sm,message),None]
     return super().next(message)
 
   def actionOnEntry(self):
@@ -47,47 +52,70 @@ class WaitFriend(Alive):
   def next(self,message):
     if message["msg"] == "befriend":
       candidate = message["friend"]
-      if candidate != self.sm and self.sm.isAFriend(candidate) and candidate not in self.sm.getNeighbours():
-        candidate.sendMessage({"msg":"directConnect","sender":self.sm})
+      if candidate != self.sm and self.sm.isAFriend(candidate) and candidate not in self.sm.getNeighbours().values():
+        candidate.sendMessage({"msg":"directRequest","sender":self.sm,"request":"add"})
         return [WaitApprove(self.sm,message),None]
       else:
         return [Idle(self.sm,message),None]
-    if message["msg"] == "directConnect":
-      return [AcceptFriend(self.sm,message),None]
+    if message["msg"] == "directRequest":
+      return [AcceptDirect(self.sm,message),None]
     return super().next(message)
 
 
 class WaitApprove(Alive):
   def next(self,message):
-    if message["msg"] == "directConnect":
-      sender = message["sender"]
-      sender.sendMessage({"msg":"decline"})
-      return [None,None]
     if message["msg"] == "decline":
       return [Idle(self.sm,message),None]
-    if message["msg"] == "connected":
+    if message["msg"] == "accept":
       sender = message["sender"]
       self.sm.addNeighbour(sender)
       return [Idle(self.sm,message),None]
     return super().next(message)
 
 
-class AcceptFriend(Alive):
+class AcceptDirect(Alive):
   def actionOnEntry(self):
     sender = self.message["sender"]
-    if len(self.sm.getNeighbours()) > self.sm.getSettings().d:
-      sender.sendMessage({"msg":"decline"})
-    else:
+    request = self.message["request"]
+    if request == "add" and len(self.sm.getNeighbours()) <= self.sm.getSettings().d:
       self.sm.growLedger()
+      oldNeighbours = list(self.sm.getNeighbours().values())
       self.sm.addNeighbour(sender)
-      sender.sendMessage({"msg":"connected", "sender":self.sm})
+      sender.sendMessage({"msg":"accept", "sender":self.sm})
+      if len(self.sm.getNeighbours()) > self.sm.getSettings().d:
+        random.shuffle(oldNeighbours)
+        return [ReduceEdges(self.sm, oldNeighbours),None]
+    elif request == "remove" and len(self.sm.getNeighbours()) > self.sm.getSettings().d:
+      self.sm.growLedger()
+      self.sm.removeNeighbour(sender)
+      sender.sendMessage({"msg":"accept", "sender":self.sm})
+    else:
+      sender.sendMessage({"msg":"decline"})
     return [Idle(self.sm),None]
+
+
+class ReduceEdges(Alive):
+  def next(self,message):
+    if message["msg"] == "decline":
+      return [self, None]
+    if message["msg"] == "accept":
+      self.sm.removeNeighbour(message["sender"])
+      return [Idle(self.sm),None]
+    return super().next(message)
+
+  def actionOnEntry(self):
+    if len(self.message) > 0:
+      candidate = self.message.pop()
+      candidate.sendMessage({"msg":"directRequest","sender":self.sm,"request":"remove"})
+    else:
+      return [Idle(self.sm),None]
+    return [None, None]
 
 
 class Ready(Alive):
   def next(self,message):
-    if message["msg"] == "directConnect":
-      return [AcceptFriend(self.sm,message),None]
+    if message["msg"] == "directRequest":
+      return [AcceptDirect(self.sm,message),None]
     if message["msg"] == "exposed":
       self.sm.addExposed(message)
       return [Idle(self.sm,message),None]
@@ -111,6 +139,12 @@ class Minting(Alive):
 
 
 class Dead(Alive):
+  def next(self,message):
+    if message["msg"] == "exposed":
+      self.sm.addExposed(message)
+      return [self,None]
+    return super().next(message)
+
   def actionOnEntry(self):
     self.sm.handleExposed(False)
     return [None,None]
@@ -137,7 +171,7 @@ class Identity(StateMachine):
     return type(self).__name__+"-"+str(self.id)
 
   def getNeighbours(self):
-    return self.ledger[-1][NEIGHBOURS].values()
+    return self.ledger[-1][NEIGHBOURS]
 
   def getSettings(self):
     return self.settings
@@ -152,6 +186,9 @@ class Identity(StateMachine):
 
   def addNeighbour(self,neighbour):
     self.ledger[-1][NEIGHBOURS][neighbour.getID()] = neighbour
+
+  def removeNeighbour(self,neighbour):
+    self.ledger[-1][NEIGHBOURS].pop(neighbour.getID(),None)
 
   def addExposed(self,message):
     self.exposedMessages.append(message)

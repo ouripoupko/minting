@@ -88,7 +88,7 @@ class Everyone(ThreadedQueue):
           identity.sendMessage({"msg":"mint"})
     self.attempts = self.attempts + 1
     if self.attempts == 5000:
-        import pdb; pdb.set_trace()
+      import pdb; pdb.set_trace()
 
   def findFriend(self, identity):
     someone = random.choice(list(self.community.values()))
