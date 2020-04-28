@@ -3,6 +3,7 @@ from stateMachine import State, StateMachine
 import bisect
 import random
 
+
 class Unexpected(State):
   def actionOnEntry(self):
     print(self, "!!!   unexpected message arrived   !!!",self.message)
@@ -235,7 +236,7 @@ class Identity(StateMachine):
         if stop <= start:
           break
         if bHandleNeighbours:
-          self.ledger[index][FINE] = fine*(stop-start)
+          self.ledger[index][FINE] = self.ledger[index][FINE] + fine*(stop-start)
           print(self,"loop",self.loop,"accept fine",self.ledger[index][FINE],"from",self.ledger[index][START],"to",self.ledger[index][END])
         else:
           neighbours = set(self.ledger[index][NEIGHBOURS].values()).difference(message["visited"])

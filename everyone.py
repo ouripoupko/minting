@@ -45,10 +45,8 @@ class Everyone(ThreadedQueue):
       self.dead.append(self.community.pop(sybil.getID(),None))
       self.counters[SYBIL] = self.counters[SYBIL]-1
       self.payments = self.payments + message["payments"]
-      print("payments:",self.payments)
     if message["msg"] == "payments":
       self.payments = self.payments + message["payments"]
-      print("payments:",self.payments)
 
   def work(self):
     if math.floor(self.counters[CORRUPT]*self.settings.sybilRatio) > self.counters[SYBIL]:
@@ -77,7 +75,7 @@ class Everyone(ThreadedQueue):
         for identity in self.community.values():
           identity.sendMessage({"msg":"die"})
           time.sleep(0.1)
-        for identity in self.dead:
+        for identity in sorted(self.dead, key = lambda ident: ident.getID()):
           identity.sendMessage({"msg":"die"})
           time.sleep(0.1)
         self.doKill()
