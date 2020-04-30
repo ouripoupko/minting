@@ -9,6 +9,8 @@ import math
 import time
 
 HONEST, CORRUPT, SYBIL = range(3)
+identType = {Honest:HONEST,Corrupt:CORRUPT,Sybil:SYBIL}
+
 class Everyone(ThreadedQueue):
 
   def __init__(self,settings):
@@ -25,6 +27,7 @@ class Everyone(ThreadedQueue):
     self.loops = 0
     self.payments = 0
     self.attempts = 0
+    self.reports = 0
     random.seed()
 
   def handleMessage(self, message):
@@ -40,13 +43,16 @@ class Everyone(ThreadedQueue):
     if message["msg"] == "unfold":
       sender = message["sender"]
       self.ready.pop(sender.getID(),None)
-    if message["msg"] == "exposed":
-      sybil = message["sender"]
-      self.dead.append(self.community.pop(sybil.getID(),None))
-      self.counters[SYBIL] = self.counters[SYBIL]-1
-      self.payments = self.payments + message["payments"]
+    if message["msg"] == "died":
+      dead = message["sender"]
+      self.dead.append(self.community.pop(dead.getID(),None))
+      self.counters[identType[type(dead)]] = self.counters[identType[type(dead)]]-1
+      if "payments" in message:
+        self.payments = self.payments + message["payments"]
     if message["msg"] == "payments":
       self.payments = self.payments + message["payments"]
+    if message["msg"] == "report":
+      self.reports = self.reports + message["minted"]
 
   def work(self):
     if math.floor(self.counters[CORRUPT]*self.settings.sybilRatio) > self.counters[SYBIL]:
@@ -71,7 +77,7 @@ class Everyone(ThreadedQueue):
     if len(self.ready) == len(self.community) and self.payments == 0:
       self.attempts = 0
       self.ready = {}
-      if self.loops == 100:
+      if self.loops == self.settings.rounds:
         for identity in self.community.values():
           identity.sendMessage({"msg":"die"})
           time.sleep(0.1)
@@ -81,7 +87,8 @@ class Everyone(ThreadedQueue):
         self.doKill()
       else:
         self.loops = self.loops + 1
-        print("minting loops:",self.loops)
+        print("minting loops:",self.loops, "minted:",self.reports,sep=",")
+        self.reports = 0
         for identity in self.community.values():
           identity.sendMessage({"msg":"mint"})
     self.attempts = self.attempts + 1
