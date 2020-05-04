@@ -20,6 +20,7 @@ class State:
   def actionOnExit(self):
     pass
 
+
 class StateMachine(ThreadedQueue):
 
   def __init__(self):
@@ -27,8 +28,6 @@ class StateMachine(ThreadedQueue):
     self.state = None
 
   def handleMessage(self, message):
-#    if self.getID()>0:
-#      print(self.state,message)
     [next, transition] = self.state.next(message)
     while next:
       self.state.actionOnExit()

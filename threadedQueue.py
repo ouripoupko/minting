@@ -2,18 +2,23 @@ import threading
 import time
 from queue import Queue
 
+
 class ThreadedQueue(threading.Thread):
 
   def __init__(self):
     threading.Thread.__init__(self)
     self.q = Queue()
     self.kill = False
+    
 
   def run(self):
     while self.kill == False:
       if(self.q.empty()==False):
         message = self.q.get()
         self.handleMessage(message)
+        self.q.task_done()
+      else:
+        time.sleep(0.01)
       self.work()
       time.sleep(0.00001)
 

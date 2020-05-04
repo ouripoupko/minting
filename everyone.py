@@ -42,7 +42,7 @@ class Everyone(ThreadedQueue):
           print("ready with neighbours:", self.maxReady)
     if message["msg"] == "unfold":
       sender = message["sender"]
-      self.ready.pop(sender.getID(),None)
+      ticket = self.ready.pop(sender.getID(),None)
     if message["msg"] == "died":
       dead = message["sender"]
       self.dead.append(self.community.pop(dead.getID(),None))
@@ -92,7 +92,7 @@ class Everyone(ThreadedQueue):
         for identity in self.community.values():
           identity.sendMessage({"msg":"mint"})
     self.attempts = self.attempts + 1
-    if self.attempts == 5000:
+    if self.attempts == 50000:
       import pdb; pdb.set_trace()
 
   def findFriend(self, identity):

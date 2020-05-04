@@ -2,6 +2,7 @@
 from stateMachine import State, StateMachine
 import bisect
 import random
+import time
 
 
 class Unexpected(State):
@@ -262,7 +263,7 @@ class Identity(StateMachine):
           "minted:",sum([record[MINTED] for record in self.ledger]),
           "fined:",sum([record[FINE] for record in self.ledger]),
           "paid:",sum([record[PAID] for record in self.ledger]))
-    for record in self.ledger:
-      print(" ",record)
+#    for record in self.ledger:
+#      print(" ",record)
     super().doKill()
 

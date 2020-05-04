@@ -19,7 +19,6 @@ class Sybil(identity.Identity):
       payments = 0
       for record in self.ledger:
         fine = (record[identity.MINTED]*2 + record[identity.FINE])/len(record[identity.NEIGHBOURS])
-#        print(self,"loop",self.loop,"minted",record[identity.MINTED],"from",record[identity.START],"to",record[identity.END],"with neighbours",record[identity.NEIGHBOURS])
       # inform neighbours
         for neighbour in record[identity.NEIGHBOURS].values():
           payments = payments + 1
@@ -31,18 +30,17 @@ class Sybil(identity.Identity):
                                  "fine":fine})
       # inform community
       self.everyone.sendMessage({"msg":"died", "sender":self, "payments":payments})
-#      print(self,"died")
       # die
       return False
     return True
 
   def handleDiedWhenDead(self,index,message,fine,stop,start):
     neighbours = set(self.ledger[index][identity.NEIGHBOURS].values()).difference(message["visited"])
-#    print("fine:",fine,"neighbours:",neighbours,"stop:",stop)
+    if len(neighbours) == 0:
+      import pdb; pdb.set_trace()
     passFine = fine*(stop-start)/len(neighbours)
     payments = 0
     for neighbour in neighbours:
-#      print(self,"loop",self.loop,"is dead. passing",passFine,"to",neighbour)
       payments = payments + 1
       neighbour.sendMessage({"msg":"died",
                              "sender":self,

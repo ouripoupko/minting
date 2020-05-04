@@ -1,10 +1,10 @@
 
 
 class Settings:
-    d=3
-    honests=4
-    corruptRatio=1
-    sybilRatio=1
-    exposeProbability = 0.04
-    deathProbability = 0.004
-    rounds = 500
+    d=5
+    honests=50
+    corruptRatio=0.6667
+    sybilRatio=0.5
+    exposeProbability = 0.02
+    deathProbability = 0.001
+    rounds = 800
