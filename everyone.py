@@ -25,7 +25,6 @@ class Everyone(ThreadedQueue):
     self.ready = {}
     self.maxReady = 0
     self.loops = 0
-    self.payments = 0
     self.attempts = 0
     self.reports = 0
     random.seed()
@@ -47,10 +46,6 @@ class Everyone(ThreadedQueue):
       dead = message["sender"]
       self.dead.append(self.community.pop(dead.getID(),None))
       self.counters[identType[type(dead)]] = self.counters[identType[type(dead)]]-1
-      if "payments" in message:
-        self.payments = self.payments + message["payments"]
-    if message["msg"] == "payments":
-      self.payments = self.payments + message["payments"]
     if message["msg"] == "report":
       self.reports = self.reports + message["minted"]
 
@@ -74,9 +69,10 @@ class Everyone(ThreadedQueue):
       self.bootstrap.append(self.community[self.idCount])
       self.counters[idType] = self.counters[idType]+1
       self.idCount = self.idCount + 1
-    if len(self.ready) == len(self.community) and self.payments == 0:
+    if len(self.ready) == len(self.community):
       self.attempts = 0
       self.ready = {}
+      print("minting loops:",self.loops, "minted:",self.reports,sep=",")
       if self.loops == self.settings.rounds:
         for identity in self.community.values():
           identity.sendMessage({"msg":"die"})
@@ -87,12 +83,11 @@ class Everyone(ThreadedQueue):
         self.doKill()
       else:
         self.loops = self.loops + 1
-        print("minting loops:",self.loops, "minted:",self.reports,sep=",")
         self.reports = 0
         for identity in self.community.values():
           identity.sendMessage({"msg":"mint"})
     self.attempts = self.attempts + 1
-    if self.attempts == 50000:
+    if self.attempts == 5000:
       import pdb; pdb.set_trace()
 
   def findFriend(self, identity):

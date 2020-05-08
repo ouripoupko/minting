@@ -40,10 +40,18 @@ class Idle(Alive):
   def next(self,message):
     if message["msg"] == "directRequest":
       return [AcceptDirect(self.sm,message),None]
+    if message["msg"] == "pay":
+      self.sm.acceptPayment(message["amount"],message["start"],message["end"])
+      return [self, None]
+    if message["msg"] == "done":
+      self.sm.getDeadNotifiers().pop(message["sender"],None)
+      return [self, None]
     return super().next(message)
 
   def actionOnEntry(self):
     self.sm.handleDied(True)
+    if self.sm.getDeadNotifiers():
+      return [None,None]
     if len(self.sm.getNeighbours()) < self.sm.getSettings().d:
       self.sm.getEveryone().sendMessage({"msg":"connect","sender":self.sm})
       return [WaitFriend(self.sm),None]
@@ -145,6 +153,15 @@ class Dead(Alive):
     if message["msg"] == "died":
       self.sm.addDied(message)
       return [self,None]
+    if message["msg"] == "pay":
+      self.sm.acceptPayment(message["amount"],message["start"],message["end"])
+      return [self,None]
+    if message["msg"] == "done":
+      self.sm.getNotifiers().pop(message["sender"],None)
+      return [self,None]
+    if message["msg"] == "guilty":
+      self.sm.CollectReplies(message)
+      return [self,None]
     return super().next(message)
 
   def actionOnEntry(self):
@@ -165,6 +182,7 @@ class Identity(StateMachine):
     self.ledger = [{MINTED:0,NEIGHBOURS:{},FINE:0, PAID:0, START:self.loop, END:self.loop}]
     self.ledgerIndex = [0]
     self.diedMessages = []
+    self.deadNotifiers = {}
 
   def __str__(self):
     return type(self).__name__+"-"+str(self.id)
@@ -206,6 +224,9 @@ class Identity(StateMachine):
 
   def getID(self):
     return self.id
+    
+  def getDeadNotifiers(self):
+    return self.deadNotifiers
 
   def mint(self):
     self.ledger[-1][MINTED] = self.ledger[-1][MINTED] + 1
@@ -223,39 +244,42 @@ class Identity(StateMachine):
     self.loop = self.loop + 1
     return self.age()
 
-  def handleDiedWhenDead(self,index,message,fine,stop,start):
+  def handleDiedWhenDead(self,message):
     pass
     
   def handleDied(self, bIsAlive):
     bGrowLedger = True
-    payments = 0
     for message in self.diedMessages:
+      if "start" in message:
+        if message["dead"] not in self.deadNotifiers:
+          self.deadNotifiers[message["dead"]] = message["sender"]
+        else:
+          if self.deadNotifiers[message["dead"]] != message["sender"]:
+            print(message["dead"], message["sender"], self.deadNotifiers[message["dead"]], message["start"], message["end"])
+            continue
+        if bIsAlive:
+          payments = 0
+        else:
+          payments = self.handleDiedWhenDead(message)
+        message["dead"].sendMessage({"msg":"guilty","sender":self,"payments":payments,"start":message["start"],"end":message["end"]})
       if bIsAlive:
-        if message["sender"].getID() in self.ledger[-1][NEIGHBOURS]:
+        if message["dead"].getID() in self.ledger[-1][NEIGHBOURS]:
           if bGrowLedger:
             self.growLedger()
             bGrowLedger = False
-          self.ledger[-1][NEIGHBOURS].pop(message["sender"].getID(),None)
-      if "fine" in message:
-        payments = payments - 1
-        start = message["start"]
-        end = message["end"]
-        stop = start
-        fine = message["fine"]/(end+1-start)
-        while stop<end+1:
-          index = bisect.bisect_right(self.ledgerIndex, start)-1
-          stop = min(self.ledger[index][END],end)+1
-          if stop <= start:
-            break
-          if bIsAlive:
-            self.ledger[index][FINE] = self.ledger[index][FINE] + fine*(stop-start)
-#            print(self,"loop",self.loop,"accept fine",fine*(stop-start),"from",self.ledger[index][START],"to",self.ledger[index][END])
-          else:
-            payments = payments + self.handleDiedWhenDead(index,message,fine,stop,start)
-          start = stop
-    if payments:
-      self.everyone.sendMessage({"msg":"payments","payments":payments})
+          self.ledger[-1][NEIGHBOURS].pop(message["dead"].getID(),None)
     self.diedMessages = []
+
+  def acceptPayment(self, amount, start, end):
+    stop = start
+    fine = amount / (end+1-start)
+    while stop<end+1:
+      index = bisect.bisect_right(self.ledgerIndex, start)-1
+      stop = min(self.ledger[index][END],end)+1
+      if stop <= start:
+        break
+      self.ledger[index][FINE] = self.ledger[index][FINE] + fine*(stop-start)
+      start = stop
 
   def doKill(self):
     print(self,

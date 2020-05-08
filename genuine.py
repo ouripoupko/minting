@@ -11,17 +11,14 @@ class Genuine(identity.Identity):
     if random.random() < self.settings.deathProbability:
       # inform neighbours
       for neighbour in self.ledger[-1][identity.NEIGHBOURS].values():
-        neighbour.sendMessage({"msg":"died",
-                               "sender":self})
+        neighbour.sendMessage({"msg":"died", "sender":self, "dead":self})
       # inform community
       self.everyone.sendMessage({"msg":"died", "sender":self})
-#      print(self,"died")
+      print(self,"died")
       # die
       return False
     return True
     
-  def handleDiedWhenDead(self,index,message,fine,stop,start):
-    self.ledger[index][identity.FINE] = self.ledger[index][identity.FINE] + fine*(stop-start)
-#    print(self,"loop",self.loop,"accept fine",fine*(stop-start),"from",self.ledger[index][identity.START],"to",self.ledger[index][identity.END])
+  def handleDiedWhenDead(self,message):
     return 0
 
