@@ -20,6 +20,12 @@ class Alive(State):
       sender = message["sender"]
       sender.sendMessage({"msg":"decline"})
       return [None,None]
+    if message["msg"] == "pay":
+      self.sm.acceptPayment(message["amount"],message["start"],message["end"])
+      return [None, None]
+    if message["msg"] == "done":
+      self.sm.getDeadNotifiers().pop(message["sender"],None)
+      return [None, None]
     if message["msg"] == "died":
       self.sm.addDied(message)
       return [None,None]
@@ -40,6 +46,9 @@ class Idle(Alive):
   def next(self,message):
     if message["msg"] == "directRequest":
       return [AcceptDirect(self.sm,message),None]
+    if message["msg"] == "died":
+      self.sm.addDied(message)
+      return [self,None]
     if message["msg"] == "pay":
       self.sm.acceptPayment(message["amount"],message["start"],message["end"])
       return [self, None]
@@ -157,7 +166,7 @@ class Dead(Alive):
       self.sm.acceptPayment(message["amount"],message["start"],message["end"])
       return [self,None]
     if message["msg"] == "done":
-      self.sm.getNotifiers().pop(message["sender"],None)
+      self.sm.getDeadNotifiers().pop(message["sender"],None)
       return [self,None]
     if message["msg"] == "guilty":
       self.sm.CollectReplies(message)
@@ -252,11 +261,40 @@ class Identity(StateMachine):
     for message in self.diedMessages:
       if "start" in message:
         if message["dead"] not in self.deadNotifiers:
-          self.deadNotifiers[message["dead"]] = message["sender"]
+          self.deadNotifiers[message["dead"]] = {"start":[message["start"]],"end":[message["end"]]}
         else:
-          if self.deadNotifiers[message["dead"]] != message["sender"]:
-            print(message["dead"], message["sender"], self.deadNotifiers[message["dead"]], message["start"], message["end"])
-            continue
+          first = bisect.bisect_left(self.deadNotifiers[message["dead"]]["start"],message["start"])
+          if first == len(self.deadNotifiers[message["dead"]]["start"]):
+            if self.deadNotifiers[message["dead"]]["end"][first-1] >= message["end"]:
+              message["dead"].sendMessage({"msg":"guilty","sender":self,"payments":0,"start":message["start"],"end":message["end"]})
+              continue
+            self.deadNotifiers[message["dead"]]["start"].append(message["start"])
+            self.deadNotifiers[message["dead"]]["end"].append(message["end"])
+            if self.deadNotifiers[message["dead"]]["start"][first] <= self.deadNotifiers[message["dead"]]["end"][first-1]+1:
+              self.deadNotifiers[message["dead"]]["start"].pop(first)
+              self.deadNotifiers[message["dead"]]["end"].pop(first-1)
+          else:
+            if ((self.deadNotifiers[message["dead"]]["start"][first] == message["start"] and
+                 self.deadNotifiers[message["dead"]]["end"][first] >= message["end"]) or
+                (first > 0 and
+                 self.deadNotifiers[message["dead"]]["end"][first-1] >= message["end"])):
+              message["dead"].sendMessage({"msg":"guilty","sender":self,"payments":0,"start":message["start"],"end":message["end"]})
+              continue
+            else:
+              last = bisect.bisect_left(self.deadNotifiers[message["dead"]]["end"],message["end"])
+              self.deadNotifiers[message["dead"]]["start"].insert(first,message["start"])
+              self.deadNotifiers[message["dead"]]["end"].insert(last,message["end"])
+              if first > 0:
+                first = first - 1
+              if last < len(self.deadNotifiers[message["dead"]]["end"])-1:
+                last = last + 1
+              while first < last:
+                if self.deadNotifiers[message["dead"]]["start"][first+1] <= self.deadNotifiers[message["dead"]]["end"][first]+1:
+                  self.deadNotifiers[message["dead"]]["start"].pop(first+1)
+                  self.deadNotifiers[message["dead"]]["end"].pop(first)
+                  last = last - 1
+                else:
+                  first = first+1
         if bIsAlive:
           payments = 0
         else:
@@ -277,8 +315,11 @@ class Identity(StateMachine):
       index = bisect.bisect_right(self.ledgerIndex, start)-1
       stop = min(self.ledger[index][END],end)+1
       if stop <= start:
+        print("!!!!!!!!!              indeed I broke             !!!!!!!!!!!!!!")
+        import pdb; pdb.set_trace()
         break
       self.ledger[index][FINE] = self.ledger[index][FINE] + fine*(stop-start)
+      print(self,fine*(stop-start),sep=',',end=',')
       start = stop
 
   def doKill(self):

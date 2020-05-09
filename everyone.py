@@ -72,11 +72,20 @@ class Everyone(ThreadedQueue):
     if len(self.ready) == len(self.community):
       self.attempts = 0
       self.ready = {}
-      print("minting loops:",self.loops, "minted:",self.reports,sep=",")
+      syb = sum([(sum([record[0] for record in ident.ledger]) if isinstance(ident,Sybil) else 0) for ident in self.community.values()])
+      paid = sum([sum([record[3] for record in self.community[key].ledger]) for key in self.community])
+      paid = paid + sum([sum([record[3] for record in ident.ledger]) for ident in self.dead])
+      fine = sum([sum([record[2] for record in self.community[key].ledger]) for key in self.community])
+      fine = fine + sum([(sum([record[2] for record in ident.ledger]) if isinstance(ident,Corrupt) else 0) for ident in self.dead])
+      balance = (syb+(fine+paid)/2)/16
+      print("loops",self.loops, "minted",self.reports,"fine",fine,"paid",paid,"syb",syb,"balance",(syb+(fine+paid)/2)/16,sep=",")
+      if abs(balance-self.loops) > 0.0001:
+        import pdb; pdb.set_trace()
       if self.loops == self.settings.rounds:
         for identity in self.community.values():
           identity.sendMessage({"msg":"die"})
           time.sleep(0.1)
+        print(self.dead)
         for identity in sorted(self.dead, key = lambda ident: ident.getID()):
           identity.sendMessage({"msg":"die"})
           time.sleep(0.1)

@@ -35,3 +35,4 @@ class StateMachine(ThreadedQueue):
         transition()
       self.state = next
       [next, transition] = self.state.actionOnEntry()
+
