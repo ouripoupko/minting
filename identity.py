@@ -192,6 +192,7 @@ class Identity(StateMachine):
     self.ledgerIndex = [0]
     self.diedMessages = []
     self.deadNotifiers = {}
+    self.log = []
 
   def __str__(self):
     return type(self).__name__+"-"+str(self.id)
@@ -237,6 +238,10 @@ class Identity(StateMachine):
   def getDeadNotifiers(self):
     return self.deadNotifiers
 
+  def dolog(self):
+    self.log = [[record[MINTED], record[FINE], record[PAID], record[START], record[END]] for record in self.ledger]
+  
+  
   def mint(self):
     self.ledger[-1][MINTED] = self.ledger[-1][MINTED] + 1
     amount = 1
@@ -319,7 +324,7 @@ class Identity(StateMachine):
         import pdb; pdb.set_trace()
         break
       self.ledger[index][FINE] = self.ledger[index][FINE] + fine*(stop-start)
-      print(self,fine*(stop-start),sep=',',end=',')
+      print(self,self.state,fine*(stop-start),sep=',')
       start = stop
 
   def doKill(self):
