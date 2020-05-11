@@ -20,7 +20,7 @@ class Sybil(identity.Identity):
       self.apocalypse = {"payments":0,"records":[]}
       for record in self.ledger:
         self.apocalypse["records"].append({"fine":record[identity.MINTED]*2 + record[identity.FINE],"start":record[identity.START],"end":record[identity.END],"found":set()})
-#        record[identity.FINE] = 0
+        record[identity.FINE] = 0
         # inform neighbours
         for neighbour in record[identity.NEIGHBOURS].values():
           self.apocalypse["payments"] = self.apocalypse["payments"]+1
@@ -29,17 +29,19 @@ class Sybil(identity.Identity):
                                  "dead":self,
                                  "start":record[identity.START],
                                  "end":record[identity.END]})
-#          print(self,neighbour)
-#      print(self.apocalypse)
-      print(self,"died")
+#      print(self,"died")
       # die
       return False
     return True
 
 
   def CollectReplies(self,message):
-    self.apocalypse["payments"] = self.apocalypse["payments"] + message["payments"] - 1
-    if message["payments"] == 0:
+    if message["reply"] == "drop":
+      self.apocalypse["payments"] = self.apocalypse["payments"] - 1
+    elif message["reply"] == "pass":
+      self.apocalypse["payments"] = self.apocalypse["payments"] + message["payments"] - 1
+    elif message["reply"] == "pay":
+      self.apocalypse["payments"] = self.apocalypse["payments"] - 1
       starts = [rec["start"] for rec in self.apocalypse["records"]]
       first = bisect.bisect_left(starts,message["start"])
       if first >= len(starts) or starts[first] > message["start"]:
@@ -58,10 +60,16 @@ class Sybil(identity.Identity):
         record["start"] = message["end"]+1
       for index in range(first,last+1):
         self.apocalypse["records"][index]["found"].add(message["sender"])
+    else:
+      print("!!!!!!      I received an unexpected guilty message        !!!!!!")
+      import pdb; pdb.set_trace()      
     # inform everyone their fine
-    criminals = set()
     if self.apocalypse["payments"] == 0:
+      criminals = set()
       for record in self.apocalypse["records"]:
+        if not record["found"]:
+          print("!!!!!!      strangly I found no neighbours      !!!!!!")
+          import pdb; pdb.set_trace()
         payment = record["fine"]/len(record["found"])
         if record["end"] < record["start"]:
           print("!!!!!!!          I am going to send a message that starts after it ends        !!!!!!")
@@ -73,8 +81,6 @@ class Sybil(identity.Identity):
         criminal.sendMessage({"msg":"done","sender":self})
       # inform community
       self.everyone.sendMessage({"msg":"died", "sender":self})
-#    print(self,message)
-#    print(self.apocalypse)
 
 
   def handleDiedWhenDead(self,message):
@@ -102,4 +108,7 @@ class Sybil(identity.Identity):
                                "start":start,
                                "end":stop-1})
       start = stop
+    if payments == 0:
+      print("This is not neccesseraly a bug, but I did not expect not to find any neighbours here")
+      import pdb; pdb.set_trace()      
     return payments

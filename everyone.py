@@ -27,7 +27,6 @@ class Everyone(ThreadedQueue):
     self.loops = 0
     self.attempts = 0
     self.reports = 0
-    self.formerFine = 0
     random.seed()
 
   def handleMessage(self, message):
@@ -47,9 +46,6 @@ class Everyone(ThreadedQueue):
       dead = message["sender"]
       self.dead.append(self.community.pop(dead.getID(),None))
       self.counters[identType[type(dead)]] = self.counters[identType[type(dead)]]-1
-      if isinstance(dead,Sybil):
-        self.formerFine = self.formerFine - sum([rec[1] for rec in dead.log])
-        print(dead,self.formerFine)
     if message["msg"] == "report":
       self.reports = self.reports + message["minted"]
 
@@ -67,7 +63,8 @@ class Everyone(ThreadedQueue):
         identity.sendMessage({"msg":"start"})
       self.bootstrap = []
     else:
-      print("Creating a new identity",self.idCount)
+      if self.loops == 0:
+        print("Creating a new identity",self.idCount)
       self.community[self.idCount] = self.constructor[idType](self.settings,self.idCount,self,self.loops)
       self.community[self.idCount].start()
       self.bootstrap.append(self.community[self.idCount])
@@ -82,23 +79,14 @@ class Everyone(ThreadedQueue):
       fine = sum([sum([record[2] for record in self.community[key].ledger]) for key in self.community])
       fine = fine + sum([(sum([record[2] for record in ident.ledger]) if isinstance(ident,Corrupt) else 0) for ident in self.dead])
       balance = (syb+(fine+paid)/2)/16
-      log = sum([sum([record[1] for record in self.community[key].log]) for key in self.community])
-      log = log + sum([(sum([record[1] for record in ident.log]) if isinstance(ident,Corrupt) else 0) for ident in self.dead])
-      print("loops",self.loops, "minted",self.reports,"fine",fine,"paid",paid,"syb",syb,"balance",(syb+(fine+paid)/2)/16,"log",log,sep=",")
-      if abs(log-self.formerFine) > 0.0001:
-        print("oops")
-        import pdb; pdb.set_trace()
+      print("loops",self.loops, "minted",self.reports,"fine",fine,"paid",paid,"syb",syb,"balance",(syb+(fine+paid)/2)/16,sep=",")
       if abs(balance-self.loops) > 0.0001:
         for ident in self.community.values():
           print(ident,sum([record[2]+record[3] for record in ident.ledger])-sum([record[1]+record[2] for record in ident.log]))
         for ident in self.dead:
           print(ident,sum([record[2]+record[3] for record in ident.ledger])-sum([record[1]+record[2] for record in ident.log]))
+        print("!!!!!!!!        Balance is not right        !!!!!!!!")
         import pdb; pdb.set_trace()
-      self.formerFine = fine
-      for ident in self.community.values():
-        ident.dolog()
-      for ident in self.dead:
-        ident.dolog()
       if self.loops == self.settings.rounds:
         for identity in self.community.values():
           identity.sendMessage({"msg":"die"})

@@ -192,7 +192,6 @@ class Identity(StateMachine):
     self.ledgerIndex = [0]
     self.diedMessages = []
     self.deadNotifiers = {}
-    self.log = []
 
   def __str__(self):
     return type(self).__name__+"-"+str(self.id)
@@ -238,9 +237,6 @@ class Identity(StateMachine):
   def getDeadNotifiers(self):
     return self.deadNotifiers
 
-  def dolog(self):
-    self.log = [[record[MINTED], record[FINE], record[PAID], record[START], record[END]] for record in self.ledger]
-  
   
   def mint(self):
     self.ledger[-1][MINTED] = self.ledger[-1][MINTED] + 1
@@ -269,42 +265,29 @@ class Identity(StateMachine):
           self.deadNotifiers[message["dead"]] = {"start":[message["start"]],"end":[message["end"]]}
         else:
           first = bisect.bisect_left(self.deadNotifiers[message["dead"]]["start"],message["start"])
-          if first == len(self.deadNotifiers[message["dead"]]["start"]):
-            if self.deadNotifiers[message["dead"]]["end"][first-1] >= message["end"]:
-              message["dead"].sendMessage({"msg":"guilty","sender":self,"payments":0,"start":message["start"],"end":message["end"]})
-              continue
-            self.deadNotifiers[message["dead"]]["start"].append(message["start"])
-            self.deadNotifiers[message["dead"]]["end"].append(message["end"])
-            if self.deadNotifiers[message["dead"]]["start"][first] <= self.deadNotifiers[message["dead"]]["end"][first-1]+1:
-              self.deadNotifiers[message["dead"]]["start"].pop(first)
-              self.deadNotifiers[message["dead"]]["end"].pop(first-1)
-          else:
-            if ((self.deadNotifiers[message["dead"]]["start"][first] == message["start"] and
-                 self.deadNotifiers[message["dead"]]["end"][first] >= message["end"]) or
-                (first > 0 and
-                 self.deadNotifiers[message["dead"]]["end"][first-1] >= message["end"])):
-              message["dead"].sendMessage({"msg":"guilty","sender":self,"payments":0,"start":message["start"],"end":message["end"]})
-              continue
+          last = bisect.bisect_left(self.deadNotifiers[message["dead"]]["end"],message["end"])
+          if (last < first or
+              (first < len(self.deadNotifiers[message["dead"]]["start"]) and
+               last == first and
+               self.deadNotifiers[message["dead"]]["start"][first] == message["start"])):
+            message["dead"].sendMessage({"msg":"guilty","sender":self,"reply":"drop"})
+            continue
+          self.deadNotifiers[message["dead"]]["start"].insert(first,message["start"])
+          self.deadNotifiers[message["dead"]]["end"].insert(last,message["end"])
+          first = first - 1 if first > 0 else first
+          last = last + 1 if last < len(self.deadNotifiers[message["dead"]]["end"])-1 else last
+          while first < last:
+            if self.deadNotifiers[message["dead"]]["start"][first+1] <= self.deadNotifiers[message["dead"]]["end"][first]+1:
+              self.deadNotifiers[message["dead"]]["start"].pop(first+1)
+              self.deadNotifiers[message["dead"]]["end"].pop(first)
+              last = last - 1
             else:
-              last = bisect.bisect_left(self.deadNotifiers[message["dead"]]["end"],message["end"])
-              self.deadNotifiers[message["dead"]]["start"].insert(first,message["start"])
-              self.deadNotifiers[message["dead"]]["end"].insert(last,message["end"])
-              if first > 0:
-                first = first - 1
-              if last < len(self.deadNotifiers[message["dead"]]["end"])-1:
-                last = last + 1
-              while first < last:
-                if self.deadNotifiers[message["dead"]]["start"][first+1] <= self.deadNotifiers[message["dead"]]["end"][first]+1:
-                  self.deadNotifiers[message["dead"]]["start"].pop(first+1)
-                  self.deadNotifiers[message["dead"]]["end"].pop(first)
-                  last = last - 1
-                else:
-                  first = first+1
+              first = first+1
         if bIsAlive:
-          payments = 0
+          message["dead"].sendMessage({"msg":"guilty","sender":self,"reply":"pay","start":message["start"],"end":message["end"]})
         else:
           payments = self.handleDiedWhenDead(message)
-        message["dead"].sendMessage({"msg":"guilty","sender":self,"payments":payments,"start":message["start"],"end":message["end"]})
+          message["dead"].sendMessage({"msg":"guilty","sender":self,"reply":"pass","payments":payments})
       if bIsAlive:
         if message["dead"].getID() in self.ledger[-1][NEIGHBOURS]:
           if bGrowLedger:
@@ -324,7 +307,6 @@ class Identity(StateMachine):
         import pdb; pdb.set_trace()
         break
       self.ledger[index][FINE] = self.ledger[index][FINE] + fine*(stop-start)
-      print(self,self.state,fine*(stop-start),sep=',')
       start = stop
 
   def doKill(self):

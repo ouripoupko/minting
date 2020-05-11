@@ -14,7 +14,7 @@ class Genuine(identity.Identity):
         neighbour.sendMessage({"msg":"died", "sender":self, "dead":self})
       # inform community
       self.everyone.sendMessage({"msg":"died", "sender":self})
-      print(self,"died")
+#      print(self,"died")
       # die
       return False
     return True
